@@ -88,9 +88,70 @@ function toggle(btn) {
     let b = getBoard();
     b?.insertAdjacentHTML('beforeend', `<svg id="sa-arrows" viewBox="0 0 100 100" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:100;"></svg>`);
     
-    engine = new Worker("/bundles/app/js/vendor/jschessengine/stockfish.asm.1abfa10c.js");
-    engine.postMessage("setoption name MultiPV value 3");
-    engine.postMessage("setoption name Use NNUE value true");
+    let startEngine = (targetFen) => {
+        if (engine) engine.terminate();
+        engine = new Worker("/bundles/app/js/vendor/jschessengine/stockfish.asm.1abfa10c.js");
+        engine.postMessage("uci");
+        engine.postMessage("setoption name MultiPV value 3");
+        engine.postMessage("setoption name Use NNUE value true");
+        
+        engine.onmessage = e => {
+            let str = e.data;
+            if (str.startsWith("info ")) {
+                let mPV = str.match(/multipv (\d+).* pv (.*)/);
+                if (mPV) {
+                    let idx = +mPV[1] - 1;
+                    let pvList = mPV[2].trim().split(" ");
+                    moves[idx] = pvList[0];
+                    if (idx === 0) {
+                        ponder = pvList.length > 1 ? pvList[1] : "";
+                        let mate = str.match(/score mate (-?\d+)/);
+                        let cp = str.match(/score cp (-?\d+)/);
+                        let bg = "#6b7280"; 
+                        
+                        let b = getBoard();
+                        let flip = b?.classList.contains("flipped");
+                        
+                        let wMate = mate ? (+mate[1] * (currentTurn === 'w' ? 1 : -1)) : null;
+                        let wCp = cp ? (+cp[1] * (currentTurn === 'w' ? 1 : -1)) : null;
+                        let uScore = flip ? (wMate !== null ? -wMate : -wCp) : (wMate !== null ? wMate : wCp);
+                        
+                        if (wMate !== null) {
+                            bg = uScore > 0 ? "#22c55e" : "#ef4444";
+                        } else if (wCp !== null) {
+                            bg = uScore > 30 ? "#22c55e" : (uScore < -30 ? "#ef4444" : "#6b7280");
+                        }
+                        
+                        let scStr = "";
+                        if (wMate !== null) {
+                            scStr = (uScore > 0 ? "+M" : "-M") + Math.abs(uScore);
+                        } else if (wCp !== null) {
+                            if (uScore === 0) scStr = "0.0";
+                            else scStr = (uScore > 0 ? "+" : "") + (uScore / 100).toFixed(1);
+                        }
+
+                        if (scStr) {
+                            let span = btn.querySelector('span');
+                            if (span) {
+                                span.style.background = bg;
+                                span.innerHTML = scStr;
+                            } else {
+                                btn.innerHTML = `Stop Analyzer <span style="background:${bg};color:white;padding:2px 6px;border-radius:4px;margin-left:5px">${scStr}</span>`;
+                            }
+                        }
+                    }
+                    render();
+                }
+            }
+        };
+        
+        if (targetFen) {
+            engine.postMessage(`position fen ${targetFen}`);
+            engine.postMessage("go depth 50");
+        }
+    };
+
+    startEngine();
     btn.innerHTML = "Stop Analyzer";
     fen = ""; moves = []; ponder = "";
     let stableFen = "";
@@ -132,57 +193,9 @@ function toggle(btn) {
         stableFrames++;
         if (stableFrames === 4) { 
             fen = nf;
-            engine.postMessage("stop");
-            engine.postMessage(`position fen ${fen}`);
-            engine.postMessage("go depth 50");
+            startEngine(fen);
         }
     }, 30);
-
-    engine.onmessage = e => {
-        let str = e.data;
-        if (str.startsWith("info ")) {
-            let mPV = str.match(/multipv (\d+).* pv (.*)/);
-            if (mPV) {
-                let idx = +mPV[1] - 1;
-                let pvList = mPV[2].trim().split(" ");
-                moves[idx] = pvList[0];
-                if (idx === 0) {
-                    ponder = pvList.length > 1 ? pvList[1] : "";
-                    let mate = str.match(/score mate (-?\d+)/);
-                    let cp = str.match(/score cp (-?\d+)/);
-                    let bg = "#6b7280"; 
-                    
-                    let b = getBoard();
-                    let flip = b?.classList.contains("flipped");
-                    
-                    let wMate = mate ? (+mate[1] * (currentTurn === 'w' ? 1 : -1)) : null;
-                    let wCp = cp ? (+cp[1] * (currentTurn === 'w' ? 1 : -1)) : null;
-                    let uScore = flip ? (wMate !== null ? -wMate : -wCp) : (wMate !== null ? wMate : wCp);
-                    
-                    if (wMate !== null) {
-                        bg = uScore > 0 ? "#22c55e" : "#ef4444";
-                    } else if (wCp !== null) {
-                        bg = uScore > 30 ? "#22c55e" : (uScore < -30 ? "#ef4444" : "#6b7280");
-                    }
-                    
-                    let scStr = "";
-                    if (wMate !== null) scStr = (wMate > 0 ? "+M" : "-M") + Math.abs(wMate);
-                    else if (wCp !== null) scStr = (wCp > 0 ? "+" : "") + (wCp / 100).toFixed(1);
-
-                    if (scStr) {
-                        let span = btn.querySelector('span');
-                        if (span) {
-                            span.style.background = bg;
-                            span.innerHTML = scStr;
-                        } else {
-                            btn.innerHTML = `Stop Analyzer <span style="background:${bg};color:white;padding:2px 6px;border-radius:4px;margin-left:5px">${scStr}</span>`;
-                        }
-                    }
-                }
-                render();
-            }
-        }
-    };
 }
 
 let obs = new MutationObserver((m, o) => {
