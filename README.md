@@ -1,6 +1,7 @@
 # Chess Analyzer
 
 ![Preview](image.png)
+![Demo](video.gif)
 A lightweight, minimalist browser extension for real-time chess analysis.
 
 ## Features
@@ -14,7 +15,14 @@ A lightweight, minimalist browser extension for real-time chess analysis.
 
 ## Installation
 
-1. Open your browser's extensions page (edge://extensions/ or chrome://extensions/).
+### 1. Clone the Repository
+Open your terminal and clone the repository using Git:
+```bash
+git clone https://github.com/peenjeee/chess-analyzer.git
+```
+
+### 2. Load into Browser
+1. Open your browser's extensions page (`edge://extensions/` or `chrome://extensions/`).
 2. Enable "Developer Mode".
 3. Click "Load unpacked" and select the extension directory.
 4. The extension is now ready to use on supported pages.
