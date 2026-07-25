@@ -4,6 +4,8 @@
 ![Demo](video.gif)
 A lightweight, minimalist browser extension for real-time chess analysis.
 
+> **Note:** A userscript version of this tool is also available in the [chess-userscript](https://github.com/peenjeee/chess-userscript) repository.
+
 ## Features
 
 - Engine: Utilizes stockfish.asm.1abfa10c.js (NNUE enabled, depth 50).
