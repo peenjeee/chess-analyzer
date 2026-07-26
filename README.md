@@ -13,7 +13,7 @@ A lightweight, minimalist browser extension for real-time chess analysis.
 - Visual Overlays: Draws SVG arrows (Blue, Green, Red) to indicate top moves. Knights use L-shaped paths.
 - Turn Detection: Automatically reads the current turn and board orientation.
 - Pondering: Displays anticipated opponent replies via dashed lines.
-- Hotkey: Toggle the analyzer on and off by pressing the 'A' key.
+- Hotkeys: Toggle the analyzer on and off with the 'A' key, and hide or show the analyzer button with the 'Insert' key.
 
 ## Installation
 
@@ -34,6 +34,7 @@ git clone https://github.com/peenjeee/chess-analyzer.git
 1. Open a chess game.
 2. Press 'A' on your keyboard to toggle the analyzer overlay.
 3. Follow the arrow guides on the board.
+4. Press 'Insert' to hide or show the analyzer button (the 'A' hotkey keeps working while it is hidden).
 
 ## Troubleshooting
 
