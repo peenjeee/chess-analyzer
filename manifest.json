@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chess Analyzer",
-  "version": "1.1",
+  "version": "2.0",
   "icons": {
     "16": "icon.png",
     "48": "icon.png",
@@ -13,7 +13,8 @@
       "js": ["scripts/main.js"],
       "matches": [
         "https://www.chess.com/*",
-        "https://chess.com/*"
+        "https://chess.com/*",
+        "https://lichess.org/*"
       ]
     }
   ]

@@ -8,12 +8,16 @@ A lightweight, minimalist browser extension for real-time chess analysis.
 
 ## Features
 
-- Engine: Utilizes stockfish.asm.1abfa10c.js (NNUE enabled, depth 50).
-- Fast Parsing: Extracts FEN from the DOM instantly using regex.
+- Sites: Works on **chess.com** and **lichess.org**.
+- Engine: Full-strength Stockfish 18 NNUE (~113MB, downloaded once and cached), with chess.com's built-in engine as a fallback. On lichess, suggestions come instantly from the lichess cloud evaluation (depth 60+), with the local engine as a fallback.
+- Fast Parsing: Extracts FEN from the DOM instantly (piece classes on chess.com, piece transforms on lichess).
 - Visual Overlays: Draws SVG arrows (Blue, Green, Red) to indicate top moves. Knights use L-shaped paths.
 - Turn Detection: Automatically reads the current turn and board orientation.
 - Pondering: Displays anticipated opponent replies via dashed lines.
-- Hotkeys: Toggle the analyzer on and off with the 'A' key, and hide or show the analyzer button with the 'Insert' key.
+- Live Relay: Shows a **Relay ID** badge — enter it in the [Chess Analyzer web app](https://chess.0xpnj.dev) (**Live** tab → **Session ID**) to mirror your game with engine suggestions on another device, with a full Game Review when it ends.
+- Hotkeys: Toggle the analyzer on and off with the 'A' key, and hide or show the analyzer button and relay badge with the 'Insert' key.
+
+> `scripts/main.js` is generated from `userscript.js` in the [chess-userscript](https://github.com/peenjeee/chess-userscript) repository — edit it there.
 
 ## Installation
 
