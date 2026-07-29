@@ -484,7 +484,7 @@
     let relayLastMoves = "";
     let relayEndSent = false;
     let relayBoard = null;
-    let relayFrame = 0;
+    let relayQueued = false;
     const relayBoardObserver = new MutationObserver(queueRelayTick);
 
     function readPlayers(flipped) {
@@ -723,7 +723,7 @@
             if (fenChanged) {
                 publishRelayPosition(pos);
                 if (SITE === 'chesscom') {
-                    requestAnimationFrame(() => refreshRelayMoves(pos.fen));
+                    queueMicrotask(() => refreshRelayMoves(pos.fen));
                     setTimeout(() => refreshRelayMoves(pos.fen), 100);
                 }
             }
@@ -734,9 +734,10 @@
     }
 
     function queueRelayTick() {
-        if (relayFrame) return;
-        relayFrame = requestAnimationFrame(() => {
-            relayFrame = 0;
+        if (relayQueued) return;
+        relayQueued = true;
+        queueMicrotask(() => {
+            relayQueued = false;
             relayTick();
         });
     }
