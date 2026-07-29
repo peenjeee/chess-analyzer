@@ -14,7 +14,7 @@ A lightweight, minimalist browser extension for real-time chess analysis.
 - Visual Overlays: Draws SVG arrows (Blue, Green, Red) to indicate top moves. Knights use L-shaped paths.
 - Turn Detection: Automatically reads the current turn and board orientation.
 - Pondering: Displays anticipated opponent replies via dashed lines.
-- Live Relay: Press **Ctrl+Shift+C** to copy your **Relay ID** — enter it in the [Chess Analyzer web app](https://chess.0xpnj.dev) (**Live** tab → **Session ID**) to mirror your game with engine suggestions on another device, with a full Game Review when it ends. No persistent relay UI.
+- Live Relay: Press **Ctrl+Shift+C** or **Ctrl+Shift+X** to copy your **Relay ID** — enter it in the [Chess Analyzer web app](https://chess.0xpnj.dev) (**Live** tab → **Session ID**) to mirror your game with engine suggestions on another device, with a full Game Review when it ends. No persistent relay UI.
 - Hotkeys: Show/hide the move suggestions with the 'A' key (starts/stops the analyzer), and hide or show the Analyze button with the 'Insert' key.
 
 > `scripts/main.js` is generated from `userscript.js` in the [chess-userscript](https://github.com/peenjeee/chess-userscript) repository — edit it there.
