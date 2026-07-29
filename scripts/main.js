@@ -678,10 +678,10 @@
         }
     }
 
-    function publishRelayPosition(pos) {
+    function publishRelayPosition(pos, force = false) {
         let playedMoves = SITE === 'chesscom' ? readMovesCC() : [];
         let movesKey = playedMoves.join(' ');
-        if (pos.fen === relayLastFen && movesKey === relayLastMoves) return false;
+        if (!force && pos.fen === relayLastFen && movesKey === relayLastMoves) return false;
 
         relayLastFen = pos.fen;
         relayLastMoves = movesKey;
@@ -747,6 +747,10 @@
         subtree: true
     });
     queueRelayTick();
+    setInterval(() => {
+        const pos = readBoard();
+        if (pos && !isGameOver()) publishRelayPosition(pos, true);
+    }, 2000);
 
     // --------------------------------------------------------------------- ui
 
