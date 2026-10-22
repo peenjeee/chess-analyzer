@@ -8,9 +8,9 @@ A lightweight, minimalist browser extension for real-time chess analysis.
 
 ## Features
 
-- Sites: Works on **chess.com** and **lichess.org**.
+- Sites: Works on **chess.com**, **lichess.org**, and **endgame.ai**.
 - Engine: Full-strength Stockfish 18 NNUE (~113MB, downloaded once and cached), with chess.com's built-in engine as a fallback. On lichess, suggestions come instantly from the lichess cloud evaluation (depth 60+), with the local engine as a fallback.
-- Fast Parsing: Extracts FEN from the DOM instantly (piece classes on chess.com, piece transforms on lichess).
+- Fast Parsing: Extracts FEN from the DOM instantly (piece classes on chess.com, piece transforms on lichess, square cells on endgame.ai).
 - Visual Overlays: Draws SVG arrows (Blue, Green, Red) to indicate top moves. Knights use L-shaped paths.
 - Turn Detection: Automatically reads the current turn and board orientation.
 - Pondering: Displays anticipated opponent replies via dashed lines.
