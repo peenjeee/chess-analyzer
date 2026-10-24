@@ -43,3 +43,4 @@ git clone https://github.com/peenjeee/chess-analyzer.git
 ## Troubleshooting
 
 - **Analyzer is stuck or arrows don't appear:** If the engine stops responding or the arrows freeze, simply press the **'A'** key twice (to turn it off and on again). This will instantly reset the engine memory and resync it with the current board position.
+- **"Engine unavailable":** the engine failed to load or crashed more than three times in a row (it restarts by itself before that — usually an interrupted 113MB download). Press **'A'** twice to retry from scratch.
