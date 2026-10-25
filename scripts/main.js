@@ -328,7 +328,7 @@
     // the overlay and alerts only show once it has said yes
     const SECRET_RETRY_MS = 5000;
     function newSecretState(gameId) {
-        return { gameId, boardKey: '', ownSquare: null, revealed: [], inFlight: false, secret: null, retryAt: 0, spectating: false, lastOppPawns: null, queenCapturedNotified: false };
+        return { gameId, boardKey: '', ownSquare: null, revealed: [], inFlight: false, secret: null, start960: null, retryAt: 0, spectating: false, lastOppPawns: null, queenCapturedNotified: false };
     }
     let egSecret = newSecretState('');
 
@@ -380,13 +380,14 @@
         }
     }
 
-    // The public game endpoint names the variant for anyone: players,
-    // spectators and logged-out visitors. null: no answer yet, ask again later
-    function fetchIsSecretQueen(gameId) {
+    // The public game endpoint names the variant, and a Chess960 game's start
+    // position, for anyone: players, spectators and logged-out visitors.
+    // null: no answer yet, ask again later
+    function fetchEGGame(gameId) {
         return fetch('/api/games/' + encodeURIComponent(gameId), { headers: { 'Accept': 'application/json' } })
             .then(r => {
-                if (r.status === 404) return false;
-                return r.ok ? r.json().then(g => g?.variant === 'SecretQueen') : null;
+                if (r.status === 404) return {};
+                return r.ok ? r.json().then(g => g || {}) : null;
             });
     }
 
@@ -396,12 +397,13 @@
         if (Date.now() < state.retryAt) return;
         state.inFlight = true;
         state.retryAt = Date.now() + SECRET_RETRY_MS;
-        fetchIsSecretQueen(state.gameId)
-            .then(secret => {
-                if (secret === null || egSecret !== state) return;
-                state.secret = secret;
+        fetchEGGame(state.gameId)
+            .then(g => {
+                if (!g || egSecret !== state) return;
+                state.secret = g.variant === 'SecretQueen';
+                state.start960 = g.variant === 'Chess960' && typeof g.startingFen === 'string' ? g.startingFen : null;
                 // the overlay was held back until now, and the board may not move again soon
-                if (secret) render(lastEGFlipped);
+                if (state.secret) render(lastEGFlipped);
             })
             .catch(() => {})
             .finally(() => { state.inFlight = false; });
@@ -644,13 +646,33 @@
         return out;
     }
 
+    // Chess960 castling comes as king-takes-own-rook (f1h1). Draw where the
+    // king lands, or the rook's move when the king already stands there.
+    // The ponder move is read on the board after the best move, so a king
+    // recapturing on the square a rook was just taken on stays a capture.
+    function shown960(m, after) {
+        if (!searchBoard960 || !m || m.length < 4 || m[1] === '@') return m;
+        let board = searchBoard960;
+        if (after && after.length >= 4 && after[1] !== '@') {
+            board = board.map(row => row.slice());
+            let [fr, fc, tr, tc] = [8 - +after[1], 'abcdefgh'.indexOf(after[0]), 8 - +after[3], 'abcdefgh'.indexOf(after[2])];
+            if (board[fr] && board[tr]) { board[tr][tc] = board[fr][fc]; board[fr][fc] = ''; }
+        }
+        let at = sq => board[8 - +sq[1]]?.['abcdefgh'.indexOf(sq[0])] || '';
+        let king = at(m.slice(0, 2)), rook = at(m.slice(2, 4));
+        if (!/^[Kk]$/.test(king) || rook !== (king === 'K' ? 'R' : 'r')) return m;
+        let short = m[2] > m[0], rank = m[1];
+        let kingTo = (short ? 'g' : 'c') + rank;
+        return kingTo !== m.slice(0, 2) ? m.slice(0, 2) + kingTo : m.slice(2, 4) + (short ? 'f' : 'd') + rank;
+    }
+
     function render(flip) {
         let svg = document.getElementById("sa-arrows");
         if (!svg) return;
         let threats = renderEGThreats(flip);
         svg.innerHTML = `<defs>${["#3b82f6", "#ef4444", "#22c55e", "#a855f7"].map((c, i) => `<marker id="arr-${i === 3 ? 'p' : i}" orient="auto" markerWidth="4" markerHeight="4" refX="3" refY="2"><polygon points="0,0 4,2 0,4" fill="${c}"/></marker>`).join('')}</defs>`
             + threats
-            + (ponder ? draw(ponder, 3, flip) : "") + [2, 1, 0].map(i => draw(moves[i], i, flip)).join("");
+            + (ponder ? draw(shown960(ponder, moves[0]), 3, flip) : "") + [2, 1, 0].map(i => draw(shown960(moves[i]), i, flip)).join("");
     }
 
     // ------------------------------------------------------------ score badge
@@ -689,6 +711,9 @@
     let bootTimer = null, retryTimer = null;
     let usingFallback = false;
     let engineVariant = 'chess';   // UCI_Variant the worker plays; standard chess runs on SF18
+    let engine960 = false;         // UCI_Chess960 as last sent to the worker
+    let pending960 = false;        // whether pendingFen is a Chess960 position
+    let searchBoard960 = null;     // the Chess960 board being searched, to spot castling moves
     // A failed load or a crashed worker is retried a few times before giving up
     const ENGINE_RETRIES = 3;
     const ENGINE_RETRY_MS = 3000;
@@ -813,6 +838,7 @@
     function startWorker(w, bootMs) {
         engine = w;
         engineReady = false;
+        engine960 = false;
         wireEngine(w);
         clearTimeout(bootTimer);
         bootTimer = setTimeout(() => {
@@ -857,11 +883,16 @@
         moves = []; ponder = "";
         searching = true;
         searchTurn = f.split(' ')[1];
+        if (pending960 !== engine960) {
+            engine960 = pending960;
+            engine.postMessage("setoption name UCI_Chess960 value " + engine960);
+        }
+        searchBoard960 = engine960 ? parsePlacement(f.split(' ')[0]) : null;
         engine.postMessage("position fen " + f);
         engine.postMessage("go infinite");
     }
 
-    function analyzeWorker(fen, flip, variant) {
+    function analyzeWorker(fen, flip, variant, chess960) {
         // a worker plays one variant, so a game of another variant gets a fresh one
         if (variant !== engineVariant) {
             stopEngine();
@@ -871,6 +902,7 @@
         }
         engineFlip = flip;
         pendingFen = fen;
+        pending960 = chess960;
         ensureEngine();
         pump();
     }
@@ -974,6 +1006,85 @@
         return [placement, turn, ...rest].join(' ');
     }
 
+    // --------------------------------------------------------------- chess960
+    // A Chess960 side may castle with a rook while its king and that rook
+    // still stand where they started, so the rights come from the game's
+    // start position, which each site's game API names. One lookup per game.
+
+    // Shredder-FEN rights (rook file letters, outer rook first)
+    function castling960(placement, startFen) {
+        let now = parsePlacement(placement), start = parsePlacement(startFen.split(' ')[0]);
+        if (!now || !start) return '-';
+        let rights = '';
+        for (let [row, king, rook, fileA] of [[7, 'K', 'R', 65], [0, 'k', 'r', 97]]) {
+            let kingFile = start[row].indexOf(king);
+            if (kingFile < 0 || now[row][kingFile] !== king) continue;
+            for (let f = 7; f >= 0; f--) {
+                if (start[row][f] === rook && now[row][f] === rook) rights += String.fromCharCode(fileA + f);
+            }
+        }
+        return rights || '-';
+    }
+
+    // The game to ask about, as { id, url, read }: read takes the response and
+    // gives the start FEN, or null for a game that is not Chess960
+    function game960() {
+        if (SITE === 'lichess') {
+            // lichess names the variant on the page, so other games need no lookup;
+            // the analysis board, studies and broadcasts are not games
+            if (!document.querySelector('.round__app.variant-chess960, main.analyse.variant-chess960')) return null;
+            if (/^\/(analysis|study|broadcast)\b/.test(location.pathname)) return null;
+            let id = location.pathname.match(/^\/(?:game\/)?(\w{8})/)?.[1];
+            return id && {
+                id,
+                url: '/game/export/' + id + '?moves=false',
+                read: r => r.text().then(pgn => pgn.match(/\[FEN "([^"]+)"\]/)?.[1] || null)
+            };
+        }
+        if (SITE === 'chesscom') {
+            let m = location.pathname.match(/\/game\/(?:(live|daily)\/)?(\d+)/);
+            return m && {
+                id: m[2],
+                url: '/callback/' + (m[1] || 'live') + '/game/' + m[2],
+                read: r => r.json().then(d => d?.game?.type === 'chess960' && d.game.initialSetup || null)
+            };
+        }
+        return null;
+    }
+
+    // A few tries a few seconds apart, a minute after "too many requests";
+    // a game that never answers is treated as standard chess
+    const START960_TRIES = 3;
+    const START960_RETRY_MS = 5000;
+    const START960_BUSY_MS = 60000;
+    let start960 = { id: '', fen: null, known: false, inFlight: false, tries: 0, retryAt: 0 };
+
+    // The current game's Chess960 start FEN; null for other games and until it is known
+    function chess960Start() {
+        if (SITE === 'endgame') return egSecret.start960;
+        let game = game960();
+        if (!game) return null;
+        if (start960.id !== game.id) start960 = { id: game.id, fen: null, known: false, inFlight: false, tries: 0, retryAt: 0 };
+        let state = start960;
+        if (!state.known && !state.inFlight && Date.now() >= state.retryAt) {
+            state.inFlight = true;
+            state.retryAt = Date.now() + START960_RETRY_MS;
+            fetch(game.url)
+                .then(r => {
+                    if (r.status === 404) return null;
+                    if (r.status === 429) state.retryAt = Date.now() + START960_BUSY_MS;
+                    return r.ok ? game.read(r) : undefined;
+                })
+                .catch(() => undefined)
+                .then(fen => {
+                    if (fen !== undefined) state.fen = fen;
+                    state.known = fen !== undefined || ++state.tries >= START960_TRIES;
+                })
+                .finally(() => { state.inFlight = false; });
+        }
+        return state.fen;
+    }
+
     // --------------------------------------------------------------- analyzer
 
     function toggle(btn) {
@@ -1006,14 +1117,23 @@
                 render(flipped);
             }
 
-            if (pos.fen === fen) return;
+            // Chess960 castling rights come from the start position; pos.fen
+            // itself stays as read, since the relay sends it on
+            let rules = pos.rules || STANDARD;
+            let start = rules.uci === 'chess' ? chess960Start() : null;
+            let posFen = pos.fen;
+            if (start) {
+                let f = posFen.split(' ');
+                f[2] = castling960(f[0], start);
+                posFen = f.join(' ');
+            }
+            if (posFen === fen) return;
 
-            fen = pos.fen;
+            fen = posFen;
             moves = []; ponder = "";
             render(pos.flipped);
-            let rules = pos.rules || STANDARD;
             let playable = playableFen(fen, rules);
-            if (playable) analyzeWorker(playable, pos.flipped, rules.uci);
+            if (playable) analyzeWorker(playable, pos.flipped, rules.uci, !!start);
             else idleEngine();
         }, 30);
     }
