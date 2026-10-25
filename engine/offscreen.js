@@ -12,8 +12,12 @@ const DRIVE = {
     'pawnsideways-68b37e5c25b0': '1AvP9VBjZbU02AEcOCqeAy3hJ-Ye3jCt3',
     'petrified-fa7e5810f172': '1AQvihbxa30tQmUxX_0DDWci7AzoAyeja',
     'seirawan-432c65fe71fc': '1vZfLrkKdO1Sdo__jRPpuvrvvQD_mYsZX',
-    'chaturanga-1889e98f8d54': '1kqqsa-sY-Azrqe0pFMPNPN2ztIYpg0OA'
+    'chaturanga-1889e98f8d54': '1kqqsa-sY-Azrqe0pFMPNPN2ztIYpg0OA',
+    'duck-ba21f91f5d81': '18OCEAX2BiioIlW4Eg-YrJxbrujfMUCm7'
 };
+// The lichess build has no duck chess (and one loaded into it crashes a few
+// plies into a search), so that one runs on the project's own build.
+const OWN_BUILD = new Set(['duck']);
 let urlOf = name => DRIVE[name]
     ? 'https://drive.usercontent.google.com/download?export=download&confirm=t&id=' + DRIVE[name]
     : NNUE_URL + name + '.nnue';
@@ -58,7 +62,7 @@ chrome.runtime.onConnect.addListener(port => {
         if (worker) return typeof msg === 'string' ? worker.postMessage(msg) : close();
         let { variant, nnue } = msg || {};
         if (!/^\w+$/.test(variant) || (nnue !== null && !/^\w+-[0-9a-f]{12}$/.test(nnue))) return close();
-        worker = new Worker('fsf-worker.js', { type: 'module' });
+        worker = OWN_BUILD.has(variant) ? new Worker('fairy-worker.js') : new Worker('fsf-worker.js', { type: 'module' });
         worker.onmessage = e => open && port.postMessage(e.data);
         worker.onerror = close;
         let network = !nnue ? Promise.resolve(null) : DRIVE[nnue] ? loadNnue(nnue).catch(() => null) : loadNnue(nnue);
