@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Chess Analyzer
 // @namespace    http://tampermonkey.net/
-// @version      2.9
-// @description  Chess analyzer with full Stockfish 18 NNUE, lichess and endgame.ai support, and web-app relay
+// @version      3.0
+// @description  Chess analyzer with full Stockfish 18 NNUE, lichess (with variants) and endgame.ai support, and web-app relay
 // @author       Peenjeee
 // @match        https://www.chess.com/*
 // @match        https://lichess.org/*
@@ -12,6 +12,7 @@
 // @grant        GM.xmlHttpRequest
 // @connect      localhost
 // @connect      chess.0xpnj.dev
+// @connect      cdn.jsdelivr.net
 // ==/UserScript==
 
 (function() {
@@ -28,6 +29,16 @@
     const REMOTE_WASM = "https://chess.0xpnj.dev/stockfish-18-single.wasm";
     // chess.com's internal engine as a fallback (chess.com pages only)
     const CC_FALLBACK = "/bundles/app/js/vendor/jschessengine/stockfish.asm.1abfa10c.js";
+    // lichess variants run on multi-variant Stockfish 10 (GPLv3,
+    // github.com/lichess-org/stockfish.js): one thread and no SharedArrayBuffer,
+    // so it runs wherever SF18 does. Pinned on jsDelivr and checked byte for
+    // byte, since it runs with the page's origin.
+    const MV_JS = "https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.wasm.js";
+    const MV_WASM = "https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.wasm";
+    const MV_SHA256 = {
+        js: "064175042d8b72eb9fba8311b730f6f5cebcfec736494698d675dc433f3bd275",
+        wasm: "45816b436eb8c180acb2c5b9fda0148101f411edbfa6bf919918e0a362eafca8"
+    };
     const CLOUD_EVAL = "https://lichess.org/api/cloud-eval";
 
     // Relay (mirrors the game to the Chess Analyzer web app via its SSE API)
@@ -168,9 +179,28 @@
         };
     }
 
+    // lichess variants by the key in the game's `variant-*` class. `uci` is the
+    // engine's name for it; the rest is what playableFen accepts: kings per
+    // side (null: any number), what a king in check means (royal: it is that
+    // side's turn; atomic: the same unless the kings touch; never: the board
+    // was misread; none: kings are ordinary pieces), and whether castling and
+    // white pawns on rank 1 occur. Other keys (chess960, fromPosition) stay standard.
+    const STANDARD = { uci: 'chess', kings: [1, 1], check: 'royal', castling: true, firstRankPawns: false };
+    const LI_VARIANTS = {
+        kingOfTheHill: { ...STANDARD, uci: 'kingofthehill' },
+        threeCheck: { ...STANDARD, uci: '3check' },
+        crazyhouse: { ...STANDARD, uci: 'crazyhouse' },
+        atomic: { ...STANDARD, uci: 'atomic', check: 'atomic' },
+        horde: { ...STANDARD, uci: 'horde', kings: [0, 1], firstRankPawns: true },
+        racingKings: { ...STANDARD, uci: 'racingkings', check: 'never', castling: false },
+        antichess: { ...STANDARD, uci: 'giveaway', kings: null, check: 'none', castling: false }
+    };
+
     function readBoardLI() {
         let b = document.querySelector('cg-board');
         if (!b) return null;
+        let host = b.closest('.round__app, main.analyse');
+        let rules = LI_VARIANTS[host?.className.match(/\bvariant-(\w+)/)?.[1]] || STANDARD;
         let wrap = b.closest('.cg-wrap') || document.querySelector('.cg-wrap');
         let flipped = !!wrap && wrap.classList.contains('orientation-black');
         let size = b.getBoundingClientRect().width / 8;
@@ -214,6 +244,16 @@
 
         if (lastColor === 'w') currentTurn = 'b';
         else if (lastColor === 'b') currentTurn = 'w';
+        else if (rules.check === 'atomic') {
+            // An atomic capture blows up both last-move squares. The analysis
+            // board's current move still gives the ply (two path characters per
+            // ply); a live game's running clock gives the side to move.
+            let active = host?.querySelector('move.active');
+            let clock = document.querySelector('.rclock.running');
+            if (active) currentTurn = (active.getAttribute('p') || '').length / 2 % 2 ? 'b' : 'w';
+            else if (clock?.classList.contains('rclock-white')) currentTurn = 'w';
+            else if (clock?.classList.contains('rclock-black')) currentTurn = 'b';
+        }
 
         let f = "";
         for (let r = 8; r >= 1; r--) {
@@ -224,19 +264,40 @@
             }
         }
         let castling = "";
-        if (grid['5,1'] === 'wk') {
+        if (rules.castling && grid['5,1'] === 'wk') {
             if (grid['8,1'] === 'wr') castling += "K";
             if (grid['1,1'] === 'wr') castling += "Q";
         }
-        if (grid['5,8'] === 'bk') {
+        if (rules.castling && grid['5,8'] === 'bk') {
             if (grid['8,8'] === 'br') castling += "k";
             if (grid['1,8'] === 'br') castling += "q";
+        }
+
+        // Crazyhouse pockets sit beside the board: one piece per role, its count in data-nb
+        let pocket = "";
+        if (rules.uci === 'crazyhouse') {
+            host.querySelectorAll('.pocket piece').forEach(p => {
+                let type = Object.keys(TYPES).find(k => p.classList.contains(k));
+                if (!type) return;
+                let letter = p.classList.contains('white') ? TYPES[type].toUpperCase() : TYPES[type];
+                pocket += letter.repeat(+p.dataset.nb || 0);
+            });
+            pocket = "[" + pocket + "]";
+        }
+        // Three-check: each check given shows as a king icon in the giver's
+        // material bar; the engine wants the checks each side has left
+        let checks = "";
+        if (rules.uci === '3check') {
+            let given = side => host.querySelectorAll(`.material-${side} mpiece.king`).length;
+            let [byWhite, byBlack] = flipped ? [given('top'), given('bottom')] : [given('bottom'), given('top')];
+            checks = Math.max(0, 3 - byWhite) + "+" + Math.max(0, 3 - byBlack) + " ";
         }
 
         return {
             board: b,
             flipped,
-            fen: f.replace(/1+/g, m => m.length) + " " + currentTurn + " " + (castling || "-") + " - 0 1"
+            rules,
+            fen: f.replace(/1+/g, m => m.length) + pocket + " " + currentTurn + " " + (castling || "-") + " - " + checks + "0 1"
         };
     }
 
@@ -497,9 +558,16 @@
             if (flip) { x = 9 - x; y = 9 - y; }
             return { x: (x - 1) * 12.5 + 6.25, y: (8 - y) * 12.5 + 6.25 };
         };
+        let col = ["#3b82f6", "#ef4444", "#22c55e", "#a855f7"][i];
+        // a crazyhouse drop (N@f3) rings the square and names the piece
+        if (m[1] === '@') {
+            let p = c(m[2], m[3]);
+            if (!p) return "";
+            return `<circle cx="${p.x}" cy="${p.y}" r="5" fill="none" stroke="${col}" stroke-width="${i < 3 ? 1.2 : 0.8}" stroke-opacity="0.9" ${i === 3 ? 'stroke-dasharray="2,1"' : ''} />`
+                + `<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="700" font-family="sans-serif" fill="${col}" fill-opacity="0.9">${m[0]}</text>`;
+        }
         let p1 = c(m[0], m[1]), p2 = c(m[2], m[3]);
         if (!p1 || !p2) return "";
-        let col = ["#3b82f6", "#ef4444", "#22c55e", "#a855f7"][i];
         let dx = Math.abs(F[m[2]] - F[m[0]]), dy = Math.abs(+m[3] - +m[1]);
         let isN = (dx === 1 && dy === 2) || (dx === 2 && dy === 1);
         let d = isN ? `M ${p1.x} ${p1.y} L ${p1.x} ${p2.y} L ${p2.x} ${p2.y}` : `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
@@ -620,6 +688,7 @@
     let engineFlip = false;
     let bootTimer = null, retryTimer = null;
     let usingFallback = false;
+    let engineVariant = 'chess';   // UCI_Variant the worker plays; standard chess runs on SF18
     // A failed load or a crashed worker is retried a few times before giving up
     const ENGINE_RETRIES = 3;
     const ENGINE_RETRY_MS = 3000;
@@ -637,15 +706,38 @@
         return new Worker(blobUrl + "#" + wasmRef);
     }
 
+    async function sha256(data) {
+        let digest = await crypto.subtle.digest('SHA-256', typeof data === 'string' ? new TextEncoder().encode(data) : data);
+        return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function createVariantWorker() {
+        let [src, bytes] = await Promise.all([fetchText(MV_JS), fetchBytes(MV_WASM)]);
+        if (await sha256(src) !== MV_SHA256.js || await sha256(bytes) !== MV_SHA256.wasm) {
+            throw new Error('variant engine files do not match their pinned hashes');
+        }
+        // The loader looks for stockfish.wasm beside itself, which a blob worker
+        // has not got, so it reads the wasm blob from the worker URL hash instead
+        src = src.replace('locateFile:function(e){return e}', 'locateFile:function(){return self.location.hash.slice(1)}');
+        let blobUrl = URL.createObjectURL(new Blob([src], { type: "application/javascript" }));
+        let wasmRef = URL.createObjectURL(new Blob([bytes], { type: "application/wasm" }));
+        return new Worker(blobUrl + "#" + wasmRef);
+    }
+
     function wireEngine(w) {
         w.onmessage = e => {
             if (engine !== w) return;  // a replaced worker must not touch the arrows
             let str = String(e.data || "");
             if (str === "uciok") {
                 w.postMessage("setoption name MultiPV value 3");
-                w.postMessage("setoption name Threads value 1");
-                w.postMessage("setoption name Hash value 64");
-                w.postMessage("setoption name Use NNUE value true");
+                if (engineVariant === 'chess') {
+                    w.postMessage("setoption name Threads value 1");
+                    w.postMessage("setoption name Hash value 64");
+                    w.postMessage("setoption name Use NNUE value true");
+                } else {
+                    // the variant build has one fixed thread and hash, and setting Threads hangs it
+                    w.postMessage("setoption name UCI_Variant value " + engineVariant);
+                }
                 w.postMessage("isready");
                 return;
             }
@@ -732,16 +824,21 @@
     async function ensureEngine() {
         if (engine || engineFailed || engineStarting || !iv) return;
         engineStarting = true;
+        let variant = engineVariant;
         let btn = document.getElementById("sa-btn");
-        if (btn && !usingFallback) btn.innerHTML = "Loading engine… (one-time ~113MB)";
+        if (btn && !usingFallback) btn.innerHTML = variant === 'chess' ? "Loading engine… (one-time ~113MB)" : "Loading variant engine…";
         try {
-            let w = usingFallback ? new Worker(CC_FALLBACK) : await createRemoteWorker();
-            if (!iv) { w.terminate(); return; }  // analyzer stopped while loading
+            let w = usingFallback ? new Worker(CC_FALLBACK)
+                : variant === 'chess' ? await createRemoteWorker() : await createVariantWorker();
+            // the analyzer stopped, or a game of another variant came up, while loading
+            if (!iv || variant !== engineVariant) { w.terminate(); return; }
             startWorker(w, usingFallback ? 20000 : 300000);
         } catch (e) {
-            engineFailedOnce();
+            // a failed load of a variant nobody wants any more is not a strike against the new one
+            if (variant === engineVariant) engineFailedOnce();
         } finally {
             engineStarting = false;
+            if (variant !== engineVariant) ensureEngine();
         }
     }
 
@@ -764,7 +861,14 @@
         engine.postMessage("go infinite");
     }
 
-    function analyzeWorker(fen, flip) {
+    function analyzeWorker(fen, flip, variant) {
+        // a worker plays one variant, so a game of another variant gets a fresh one
+        if (variant !== engineVariant) {
+            stopEngine();
+            engineVariant = variant;
+            engineFailed = false;
+            engineRetries = 0;
+        }
         engineFlip = flip;
         pendingFen = fen;
         ensureEngine();
@@ -840,22 +944,31 @@
 
     // The FEN to analyze, or null when the board cannot be a real position.
     // Only the side to move can be in check, so a check fixes a misread turn.
-    function playableFen(fen) {
+    function playableFen(fen, rules = STANDARD) {
         let [placement, turn, ...rest] = fen.split(' ');
-        let board = parsePlacement(placement);
+        // a crazyhouse pocket follows the placement in brackets
+        let board = parsePlacement(placement.replace(/\[.*\]$/, ''));
         if (!board) return null;
         let kings = { K: [], k: [] };
         for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
                 let p = board[r][c];
                 if (p === 'K' || p === 'k') kings[p].push([r, c]);
-                if ((p === 'P' || p === 'p') && (r === 0 || r === 7)) return null;
+                if (p === 'p' && (r === 0 || r === 7)) return null;
+                if (p === 'P' && (r === 0 || (r === 7 && !rules.firstRankPawns))) return null;
             }
         }
-        if (kings.K.length !== 1 || kings.k.length !== 1) return null;
-        let whiteInCheck = attackedBy(board, kings.K[0][0], kings.K[0][1], false);
-        let blackInCheck = attackedBy(board, kings.k[0][0], kings.k[0][1], true);
+        if (rules.kings && (kings.K.length !== rules.kings[0] || kings.k.length !== rules.kings[1])) return null;
+        if (rules.check === 'none') return fen;
+        // atomic kings that touch cannot take each other, so neither is in check
+        let touching = kings.K.length === 1 && kings.k.length === 1
+            && Math.abs(kings.K[0][0] - kings.k[0][0]) <= 1 && Math.abs(kings.K[0][1] - kings.k[0][1]) <= 1;
+        let inCheck = (own, byWhite) => own.length === 1 && !(rules.check === 'atomic' && touching)
+            && attackedBy(board, own[0][0], own[0][1], byWhite);
+        let whiteInCheck = inCheck(kings.K, false);
+        let blackInCheck = inCheck(kings.k, true);
         if (whiteInCheck && blackInCheck) return null;
+        if (rules.check === 'never' && (whiteInCheck || blackInCheck)) return null;
         if (whiteInCheck) turn = 'w';
         else if (blackInCheck) turn = 'b';
         return [placement, turn, ...rest].join(' ');
@@ -898,8 +1011,9 @@
             fen = pos.fen;
             moves = []; ponder = "";
             render(pos.flipped);
-            let playable = playableFen(fen);
-            if (playable) analyzeWorker(playable, pos.flipped);
+            let rules = pos.rules || STANDARD;
+            let playable = playableFen(fen, rules);
+            if (playable) analyzeWorker(playable, pos.flipped, rules.uci);
             else idleEngine();
         }, 30);
     }
@@ -1153,8 +1267,14 @@
         return true;
     }
 
-    function refreshRelayMoves(fen) {
+    // Variant games stay out of the relay: the web app reads every position as standard chess
+    function readRelayBoard() {
         let pos = readBoard();
+        return pos && (pos.rules || STANDARD) === STANDARD ? pos : null;
+    }
+
+    function refreshRelayMoves(fen) {
+        let pos = readRelayBoard();
         if (!pos || pos.fen !== fen) return;
         if (publishRelayPosition(pos) && isGameOver()) sendRelayEnd();
     }
@@ -1167,7 +1287,7 @@
 
     function relayTick() {
         try {
-            let pos = readBoard();
+            let pos = readRelayBoard();
             if (!pos) return;
 
             if (pos.board !== relayBoard) {
@@ -1210,7 +1330,7 @@
     });
     queueRelayTick();
     setInterval(() => {
-        const pos = readBoard();
+        const pos = readRelayBoard();
         if (pos && !isGameOver()) publishRelayPosition(pos, true);
     }, 2000);
 

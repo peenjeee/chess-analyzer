@@ -10,6 +10,7 @@ A lightweight, minimalist browser extension for real-time chess analysis.
 
 - Sites: Works on **chess.com**, **lichess.org**, and **endgame.ai**.
 - Engine: Full-strength Stockfish 18 NNUE (~113MB, downloaded once and cached), with chess.com's built-in engine as a fallback. On lichess, suggestions come instantly from the lichess cloud evaluation (depth 60+), with the local engine as a fallback.
+- Lichess variants: King of the Hill, Three-Check, Antichess, Atomic, Horde, Racing Kings and Crazyhouse are analyzed by multi-variant Stockfish 10 ([lichess-org/stockfish.js](https://github.com/lichess-org/stockfish.js), GPLv3, ~0.6MB from jsDelivr, version-pinned and hash-checked). Crazyhouse pockets and three-check counters are read from the page; a suggested drop shows as a ringed square with the piece letter. Variant games are not relayed, since the web app analyzes standard chess only.
 - Fast Parsing: Extracts FEN from the DOM instantly (piece classes on chess.com, piece transforms on lichess, square cells on endgame.ai).
 - SecretQueen (endgame.ai): hidden queens (own square + revealed pieces from API/DOM badges) analyzed as queens. Features Secret Queen Threat Overlay (dashed danger lines & target beacons from all living opponent pawns) and auto-detection toast alerts when opponent pawns or their Secret Queen are captured. Both appear only once endgame.ai's API confirms the game is Secret Queen.
 - Visual Overlays: Draws SVG arrows (Blue, Green, Red) to indicate top moves. Knights use L-shaped paths.
@@ -44,4 +45,4 @@ git clone https://github.com/peenjeee/chess-analyzer.git
 ## Troubleshooting
 
 - **Analyzer is stuck or arrows don't appear:** If the engine stops responding or the arrows freeze, simply press the **'A'** key twice (to turn it off and on again). This will instantly reset the engine memory and resync it with the current board position.
-- **"Engine unavailable":** the engine failed to load or crashed more than three times in a row (it restarts by itself before that — usually an interrupted 113MB download). Press **'A'** twice to retry from scratch.
+- **"Engine unavailable":** the engine failed to load or crashed more than three times in a row (it restarts by itself before that — usually an interrupted 113MB download). Press **'A'** twice to retry from scratch. In a lichess variant game it can also mean cdn.jsdelivr.net is blocked on your network.
