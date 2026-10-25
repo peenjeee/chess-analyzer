@@ -11,7 +11,7 @@ A lightweight, minimalist browser extension for real-time chess analysis.
 - Sites: Works on **chess.com**, **lichess.org**, and **endgame.ai**.
 - Engine: Full-strength Stockfish 18 NNUE (~113MB, downloaded once and cached), with chess.com's built-in engine as a fallback. On lichess, suggestions come instantly from the lichess cloud evaluation (depth 60+), with the local engine as a fallback.
 - Fast Parsing: Extracts FEN from the DOM instantly (piece classes on chess.com, piece transforms on lichess, square cells on endgame.ai).
-- SecretQueen (endgame.ai): hidden queens (own square + revealed pieces from API/DOM badges) analyzed as queens. Features Secret Queen Threat Overlay (dashed danger lines & target beacons from all living opponent pawns) and auto-detection toast alerts when opponent pawns or their Secret Queen are captured.
+- SecretQueen (endgame.ai): hidden queens (own square + revealed pieces from API/DOM badges) analyzed as queens. Features Secret Queen Threat Overlay (dashed danger lines & target beacons from all living opponent pawns) and auto-detection toast alerts when opponent pawns or their Secret Queen are captured. Both appear only once endgame.ai's API confirms the game is Secret Queen.
 - Visual Overlays: Draws SVG arrows (Blue, Green, Red) to indicate top moves. Knights use L-shaped paths.
 - Turn Detection: Automatically reads the current turn and board orientation.
 - Pondering: Displays anticipated opponent replies via dashed lines.
