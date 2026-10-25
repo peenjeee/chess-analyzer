@@ -13,7 +13,8 @@ onmessage = async e => {
         sf.listen = line => postMessage(line);
         sf.onError = line => postMessage('info string ' + line);
         sf.uci('setoption name UCI_Variant value ' + e.data.variant);
-        sf.setNnueBuffer(new Uint8Array(e.data.nnue), 0);
+        // without a network Fairy-Stockfish evaluates with its own rules
+        if (e.data.nnue) sf.setNnueBuffer(new Uint8Array(e.data.nnue), 0);
         queue.forEach(c => sf.uci(c));
         queue = null;
     } catch (err) {

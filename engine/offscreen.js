@@ -37,14 +37,15 @@ chrome.runtime.onConnect.addListener(port => {
         open = false;
         worker?.terminate();
     });
-    // the first message names the variant and its network, the rest are UCI lines
+    // the first message names the variant and its network (null: none), the rest are UCI lines
     port.onMessage.addListener(msg => {
         if (worker) return typeof msg === 'string' ? worker.postMessage(msg) : close();
         let { variant, nnue } = msg || {};
-        if (!/^\w+$/.test(variant) || !/^\w+-[0-9a-f]{12}$/.test(nnue)) return close();
+        if (!/^\w+$/.test(variant) || (nnue !== null && !/^\w+-[0-9a-f]{12}$/.test(nnue))) return close();
         worker = new Worker('fsf-worker.js', { type: 'module' });
         worker.onmessage = e => open && port.postMessage(e.data);
         worker.onerror = close;
-        loadNnue(nnue).then(bytes => worker.postMessage({ variant, nnue: bytes }, [bytes]), close);
+        (nnue ? loadNnue(nnue) : Promise.resolve(null))
+            .then(bytes => worker.postMessage({ variant, nnue: bytes }, bytes ? [bytes] : []), close);
     });
 });
