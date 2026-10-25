@@ -223,6 +223,9 @@
 
         let lastSquares = [];
         b.querySelectorAll('square.last-move').forEach(sq => {
+            // chessground hides squares it no longer needs instead of removing them,
+            // and a hidden one keeps the classes of an older move or selection
+            if (sq.style.display === 'none') return;
             let s = sqOf(sq);
             if (s) lastSquares.push(s);
         });
@@ -244,15 +247,18 @@
 
         if (lastColor === 'w') currentTurn = 'b';
         else if (lastColor === 'b') currentTurn = 'w';
-        else if (rules.check === 'atomic') {
-            // An atomic capture blows up both last-move squares. The analysis
-            // board's current move still gives the ply (two path characters per
-            // ply); a live game's running clock gives the side to move.
+        else {
+            // Nothing stands on the last-move squares: an atomic capture blew
+            // them up, a Chess960 castle left king and rook elsewhere, or there
+            // is no last move. The analysis board's current move still gives
+            // the ply (two path characters per ply), a live game's running clock
+            // the side to move, and before the first move it is White's turn.
             let active = host?.querySelector('move.active');
             let clock = document.querySelector('.rclock.running');
             if (active) currentTurn = (active.getAttribute('p') || '').length / 2 % 2 ? 'b' : 'w';
             else if (clock?.classList.contains('rclock-white')) currentTurn = 'w';
             else if (clock?.classList.contains('rclock-black')) currentTurn = 'b';
+            else if (!lastSquares.length) currentTurn = 'w';
         }
 
         let f = "";
