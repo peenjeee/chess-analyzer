@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chess Analyzer",
-  "version": "3.10",
+  "version": "3.11",
   "icons": {
     "16": "icon.png",
     "48": "icon.png",
@@ -32,6 +32,26 @@
         "https://lichess.org/*",
         "https://endgame.ai/*",
         "https://www.endgame.ai/*"
+      ]
+    },
+    {
+      "js": ["scripts/page-bridge.js"],
+      "run_at": "document_start",
+      "matches": [
+        "https://www.chess.com/*",
+        "https://chess.com/*",
+        "https://lichess.org/*"
+      ],
+      "world": "MAIN"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["scripts/page-bridge.js"],
+      "matches": [
+        "https://www.chess.com/*",
+        "https://chess.com/*",
+        "https://lichess.org/*"
       ]
     }
   ]
