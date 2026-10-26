@@ -25,6 +25,7 @@
   "content_scripts": [
     {
       "js": ["scripts/main.js"],
+      "run_at": "document_start",
       "matches": [
         "https://www.chess.com/*",
         "https://chess.com/*",
