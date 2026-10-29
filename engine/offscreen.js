@@ -1,7 +1,10 @@
 // Runs Fairy-Stockfish for content scripts on pages that cannot run threads
 // (chess.com is not cross-origin isolated; this document is, through the
 // manifest's COOP and COEP). One engine per port, ended when the port closes.
-const NNUE_URL = 'https://lichess1.org/assets/lifat/nnue/';
+// lichess.org itself: lichess1.org now redirects there without the CORS headers
+// a browser needs to follow it. Networks cached from lichess1.org are still good.
+const NNUE_URL = 'https://lichess.org/assets/lifat/nnue/';
+const OLD_NNUE_URL = 'https://lichess1.org/assets/lifat/nnue/';
 // Networks for variants lichess does not play come from the Google Drive folder
 // the Fairy-Stockfish project shares them in (fairy-stockfish.github.io/nnue).
 // Drive sends browsers no CORS headers, so the manifest's host permission is
@@ -32,7 +35,8 @@ async function sha256(bytes) {
 async function loadNnue(name) {
     let url = urlOf(name);
     let cache = await caches.open('nnue').catch(() => null);
-    let hit = await cache?.match(url).catch(() => null);
+    let hit = await cache?.match(url).catch(() => null)
+        || (!DRIVE[name] && await cache?.match(OLD_NNUE_URL + name + '.nnue').catch(() => null));
     if (hit) return hit.arrayBuffer();
     // kept in the cache below, so not in the browser's HTTP cache as well
     let res = await fetch(url, { cache: 'no-store' });
